@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +15,15 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+
+	"google.golang.org/api/option"
+	sheets "google.golang.org/api/sheets/v4"
 )
+
+type SheetStore struct {
+	SheetUrl string
+	Sheet    string
+}
 
 var (
 	TG_TOKEN      = os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -28,7 +38,7 @@ var (
 
 	tokenStore = map[int64]*oauth2.Token{}
 
-	sheetStore = map[int64]string{}
+	sheetStore = map[int64]SheetStore{}
 
 	oauthConfig = &oauth2.Config{
 		ClientID:     GOOGLE_ID,
@@ -53,7 +63,8 @@ func initBot() (*tele.Bot, error) {
 
 	b.Handle("/start", func(c tele.Context) error {
 		startMessage := `/auth - Authenticate Google Sheets
-/status - Auth status`
+/status - Auth status
+/use_sheet {sheet_url} {sheet_name} - connect google sheet`
 
 		return c.Send(startMessage)
 	})
@@ -66,8 +77,9 @@ func initBot() (*tele.Bot, error) {
 	})
 
 	b.Handle("/status", func(c tele.Context) error {
-		_, tokenOk := tokenStore[c.Sender().ID]
-		_, sheetOk := sheetStore[c.Sender().ID]
+		userID := c.Sender().ID
+		_, tokenOk := tokenStore[userID]
+		_, sheetOk := sheetStore[userID]
 		missing := []string{}
 		if !tokenOk {
 			missing = append(missing, "token")
@@ -81,21 +93,73 @@ func initBot() (*tele.Bot, error) {
 		return c.Send(fmt.Sprintf("%s not connected. Use /auth and /use_sheets", missingMsg))
 	})
 
-	b.Handle("/use_sheets", func(c tele.Context) error {
-		sheetsUrl := c.Args()[0]
+	b.Handle("/use_sheet", func(c tele.Context) error {
+		sheetUrl := c.Args()[0]
+		sheet := c.Args()[1]
 		// todo: validate
 
 		userID := c.Sender().ID
-		sheetStore[userID] = sheetsUrl
+		sheetStore[userID] = SheetStore{
+			SheetUrl: sheetUrl,
+			Sheet:    sheet,
+		}
 
-		return c.Send(fmt.Sprintf("use: %s", sheetsUrl))
+		return c.Send("saved")
 	})
 
-	b.Handle(tele.OnText, func (c tele.Context) error {
+	b.Handle(tele.OnText, func(c tele.Context) error {
+		userID := c.Sender().ID
 		userText := c.Text()
-		//todo
+		splittedText := strings.Split(userText, ",")
 
-		return c.Send("test")
+		var trimmedInput []string
+		for _, v := range splittedText {
+			trimmedInput = append(trimmedInput, strings.TrimSpace(v))
+		}
+
+		ctx := context.Background()
+		userToken, isTokenExists := tokenStore[userID]
+		if !isTokenExists {
+			return c.Send("not authenticated")
+		}
+
+		sheetService, err := sheets.NewService(ctx, option.WithTokenSource(oauthConfig.TokenSource(ctx, userToken)))
+		if err != nil {
+			fmt.Println("error initializing sheet service")
+			return c.Send("internal server error")
+		}
+
+		valueRange := &sheets.ValueRange{
+			Values: [][]interface{}{
+				func() []interface{} {
+					row := make([]interface{}, len(trimmedInput))
+					for i, v := range trimmedInput {
+						row[i] = v
+					}
+					return row
+				}(),
+			},
+		}
+
+		userSheet := sheetStore[userID]
+		re := regexp.MustCompile(`/spreadsheets/d/([a-zA-Z0-9-_]+)`)
+		matches := re.FindStringSubmatch(userSheet.SheetUrl)
+		if len(matches) < 2 {
+			fmt.Println("error extract sheet id:", userSheet)
+			return c.Send("unable to extract sheet id")
+		}
+		spreadSheetId := matches[1]
+
+		_, err = sheetService.Spreadsheets.Values.Append(spreadSheetId, fmt.Sprintf("%s!A1", userSheet.Sheet), valueRange).
+			ValueInputOption("USER_ENTERED").
+			InsertDataOption("INSERT_ROWS").
+			Do()
+		if err != nil {
+			fmt.Println("failed to insert row")
+			return c.Send("failed to insert row")
+		}
+
+		return c.Send("Row inserted!")
 	})
 
 	return b, nil
