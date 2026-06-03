@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	tele "gopkg.in/telebot.v4"
@@ -26,6 +27,8 @@ var (
 	// }{}
 
 	tokenStore = map[int64]*oauth2.Token{}
+
+	sheetStore = map[int64]string{}
 
 	oauthConfig = &oauth2.Config{
 		ClientID:     GOOGLE_ID,
@@ -49,7 +52,10 @@ func initBot() (*tele.Bot, error) {
 	}
 
 	b.Handle("/start", func(c tele.Context) error {
-		return c.Send("/auth - Authenticate Google Sheets")
+		startMessage := `/auth - Authenticate Google Sheets
+/status - Auth status`
+
+		return c.Send(startMessage)
 	})
 
 	b.Handle("/auth", func(c tele.Context) error {
@@ -59,12 +65,37 @@ func initBot() (*tele.Bot, error) {
 		return c.Send("Connect Google Sheets:\n" + url)
 	})
 
-	b.Handle("/status", func (c tele.Context) error {
-		_, ok := tokenStore[c.Sender().ID]
-		if ok {
-			return c.Send("connected")
+	b.Handle("/status", func(c tele.Context) error {
+		_, tokenOk := tokenStore[c.Sender().ID]
+		_, sheetOk := sheetStore[c.Sender().ID]
+		missing := []string{}
+		if !tokenOk {
+			missing = append(missing, "token")
 		}
-		return c.Send("Not connected. Use /auth")
+		if !sheetOk {
+			missing = append(missing, "sheet")
+		}
+
+		missingMsg := strings.Join(missing, ", ")
+
+		return c.Send(fmt.Sprintf("%s not connected. Use /auth and /use_sheets", missingMsg))
+	})
+
+	b.Handle("/use_sheets", func(c tele.Context) error {
+		sheetsUrl := c.Args()[0]
+		// todo: validate
+
+		userID := c.Sender().ID
+		sheetStore[userID] = sheetsUrl
+
+		return c.Send(fmt.Sprintf("use: %s", sheetsUrl))
+	})
+
+	b.Handle(tele.OnText, func (c tele.Context) error {
+		userText := c.Text()
+		//todo
+
+		return c.Send("test")
 	})
 
 	return b, nil
