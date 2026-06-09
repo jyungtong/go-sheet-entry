@@ -215,9 +215,10 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 		valueRange := &sheets.ValueRange{
 			Values: [][]interface{}{
 				func() []interface{} {
-					row := make([]interface{}, len(trimmedInput))
+					row := make([]interface{}, len(trimmedInput) + 1)
+					row[0] = time.Now().Format(time.DateOnly)
 					for i, v := range trimmedInput {
-						row[i] = v
+						row[i+1] = v
 					}
 					return row
 				}(),
