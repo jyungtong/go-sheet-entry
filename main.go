@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 
-	// "net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -36,10 +35,6 @@ var (
 	GOOGLE_SECRET = os.Getenv("GOOGLE_CLIENT_SECRET")
 	REDIRECT_URL  = os.Getenv("GOOGLE_REDIRECT_URL") // default: http://localhost:8080/auth/callback
 
-	tokenStore = map[int64]*oauth2.Token{}
-
-	sheetStore = map[int64]SheetStore{}
-
 	oauthConfig = &oauth2.Config{
 		ClientID:     GOOGLE_ID,
 		ClientSecret: GOOGLE_SECRET,
@@ -57,6 +52,20 @@ func initDB() *sql.DB {
 	return db
 }
 
+func getUserGSheet(db *sql.DB, userID int64) (refreshToken string, gsheetUrl string, gsheetName string, err error) {
+	row := db.QueryRow(`
+		SELECT refresh_token, google_sheet_url, google_sheet_name
+		FROM user_gsheet
+		WHERE user_id = ?
+		`, userID)
+	err = row.Scan(&refreshToken, &gsheetUrl, &gsheetName)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return refreshToken, gsheetUrl, gsheetName, nil
+}
+
 func initBot(db *sql.DB) (*tele.Bot, error) {
 	pref := tele.Settings{
 		Token:  TG_TOKEN,
@@ -71,6 +80,7 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 
 	b.Handle("/start", func(c tele.Context) error {
 		startMessage := `/auth - Authenticate Google Sheets
+/token {callback_url} - set google token after auth
 /status - Auth status
 /use_sheet {sheet_url} {sheet_name} - connect google sheet`
 
@@ -86,14 +96,29 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 
 	b.Handle("/status", func(c tele.Context) error {
 		userID := c.Sender().ID
-		_, tokenOk := tokenStore[userID]
-		_, sheetOk := sheetStore[userID]
+
+		var (
+			refreshToken string
+			gsheetUrl    string
+			gsheetName   string
+		)
+		row := db.QueryRow(`
+		SELECT refresh_token, google_sheet_url, google_sheet_name
+		FROM user_gsheet
+		WHERE user_id = ?
+		`, userID)
+		row.Scan(&refreshToken, &gsheetUrl, &gsheetName)
+
 		missing := []string{}
-		if !tokenOk {
+		if refreshToken == "" {
 			missing = append(missing, "token")
 		}
-		if !sheetOk {
+		if gsheetUrl == "" {
 			missing = append(missing, "sheet")
+		}
+
+		if len(missing) == 0 {
+			return c.Send("all good")
 		}
 
 		missingMsg := strings.Join(missing, ", ")
@@ -107,9 +132,16 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 		// todo: validate
 
 		userID := c.Sender().ID
-		sheetStore[userID] = SheetStore{
-			SheetUrl: sheetUrl,
-			Sheet:    sheet,
+
+		_, err := db.Exec(`
+			UPDATE user_gsheet SET
+				google_sheet_url = ?,
+				google_sheet_name = ?
+			WHERE user_id = ?
+		`, sheetUrl, sheet, userID)
+		if err != nil {
+			log.Println("save google sheet error:", err)
+			return c.Send("save google sheet error")
 		}
 
 		return c.Send("saved")
@@ -163,11 +195,17 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 		}
 
 		ctx := context.Background()
-		userToken, isTokenExists := tokenStore[userID]
-		if !isTokenExists {
+
+		refreshToken, gsheetUrl, gsheetName, err := getUserGSheet(db, userID)
+		if err != nil {
+			log.Println("getUserGSheet error:", err)
+		}
+
+		if refreshToken == "" {
 			return c.Send("not authenticated")
 		}
 
+		userToken := &oauth2.Token{RefreshToken: refreshToken}
 		sheetService, err := sheets.NewService(ctx, option.WithTokenSource(oauthConfig.TokenSource(ctx, userToken)))
 		if err != nil {
 			fmt.Println("error initializing sheet service")
@@ -186,16 +224,15 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 			},
 		}
 
-		userSheet := sheetStore[userID]
 		re := regexp.MustCompile(`/spreadsheets/d/([a-zA-Z0-9-_]+)`)
-		matches := re.FindStringSubmatch(userSheet.SheetUrl)
+		matches := re.FindStringSubmatch(gsheetUrl)
 		if len(matches) < 2 {
-			fmt.Println("error extract sheet id:", userSheet)
+			fmt.Println("error extract sheet id:", gsheetUrl)
 			return c.Send("unable to extract sheet id")
 		}
 		spreadSheetId := matches[1]
 
-		_, err = sheetService.Spreadsheets.Values.Append(spreadSheetId, fmt.Sprintf("%s!A1", userSheet.Sheet), valueRange).
+		_, err = sheetService.Spreadsheets.Values.Append(spreadSheetId, fmt.Sprintf("%s!A1", gsheetName), valueRange).
 			ValueInputOption("USER_ENTERED").
 			InsertDataOption("INSERT_ROWS").
 			Do()
