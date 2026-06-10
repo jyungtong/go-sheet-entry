@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 
@@ -22,6 +23,10 @@ import (
 	sheets "google.golang.org/api/sheets/v4"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type SheetStore struct {
@@ -44,11 +49,33 @@ var (
 	}
 )
 
+func runMigrations(db *sql.DB) {
+	driver, err := sqlite.WithInstance(db, &sqlite.Config{})
+	if err != nil {
+		log.Fatal("migrate driver:", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://./db/migrations",
+		"sqlite", driver)
+	if err != nil {
+		log.Fatal("migrate init:", err)
+	}
+
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		log.Fatal("migrate up:", err)
+	}
+
+}
+
 func initDB() *sql.DB {
 	db, err := sql.Open("sqlite", "data.db")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	runMigrations(db)
 	return db
 }
 
@@ -215,7 +242,7 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 		valueRange := &sheets.ValueRange{
 			Values: [][]interface{}{
 				func() []interface{} {
-					row := make([]interface{}, len(trimmedInput) + 1)
+					row := make([]interface{}, len(trimmedInput)+1)
 					row[0] = time.Now().Format(time.DateOnly)
 					for i, v := range trimmedInput {
 						row[i+1] = v
