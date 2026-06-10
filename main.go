@@ -82,7 +82,7 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 		startMessage := `/auth - Authenticate Google Sheets
 /token {callback_url} - set google token after auth
 /status - Auth status
-/use_sheet {sheet_url} {sheet_name} - connect google sheet`
+/use_sheet {sheet_url} {sheet_name: eg, Sheet1!A:D} - connect google sheet`
 
 		return c.Send(startMessage)
 	})
@@ -233,9 +233,8 @@ func initBot(db *sql.DB) (*tele.Bot, error) {
 		}
 		spreadSheetId := matches[1]
 
-		_, err = sheetService.Spreadsheets.Values.Append(spreadSheetId, fmt.Sprintf("%s!A1", gsheetName), valueRange).
+		_, err = sheetService.Spreadsheets.Values.Append(spreadSheetId, fmt.Sprintf("%s", gsheetName), valueRange).
 			ValueInputOption("USER_ENTERED").
-			InsertDataOption("INSERT_ROWS").
 			Do()
 		if err != nil {
 			fmt.Println("failed to insert row")
