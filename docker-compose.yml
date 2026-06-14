@@ -4,7 +4,5 @@ services:
     env_file: .env
     working_dir: /data
     volumes:
-      - dbdata:/data
+      - ./data.db:/data/data.db
     restart: unless-stopped
-volumes:
-  dbdata:
