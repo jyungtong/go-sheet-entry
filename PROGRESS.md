@@ -19,8 +19,8 @@ Registry: `ghcr.io/jyungtong/go-sheet-entry:latest` (public, no server login nee
 - [x] Step 3: Verify `go build ./...` (amd64) compiles clean
 - [x] Step 4: Write `Dockerfile` — single-stage, COPY arm64 binary, root distroless-static
 - [x] Step 5: Write `build.sh` — cross-compile arm64 + buildx push
-- [ ] Step 6: Write `docker-compose.yml` — pull-only, image:, env_file, volume, restart
-- [ ] Step 7: Write `.env` — creds from env.sh, plain KEY=value
+- [x] Step 6: Write `docker-compose.yml` — pull-only, image:, env_file, volume, restart
+- [x] Step 7: Write `.env` — creds from env.sh, plain KEY=value
 - [ ] Step 8: Write `.dockerignore`
 - [ ] Step 9: `.gitignore` — add binary; `git rm --cached go-sheet-entry-linux-arm64`
 
