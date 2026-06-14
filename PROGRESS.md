@@ -14,7 +14,7 @@ Registry: `ghcr.io/jyungtong/go-sheet-entry:latest` (public, no server login nee
 ## Execution Order
 
 - [x] Plan locked
-- [ ] Step 1: `main.go` — add embed + golang-migrate runner in `initDB`
+- [x] Step 1: `main.go` — add embed + golang-migrate runner in `initDB`
 - [ ] Step 2: `go get github.com/golang-migrate/migrate/v4` + `go mod tidy`
 - [ ] Step 3: Verify `go build ./...` (amd64) compiles clean
 - [ ] Step 4: Write `Dockerfile` — single-stage, COPY arm64 binary, root distroless-static
