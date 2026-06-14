@@ -16,9 +16,9 @@ Registry: `ghcr.io/jyungtong/go-sheet-entry:latest` (public, no server login nee
 - [x] Plan locked
 - [x] Step 1: `main.go` — add embed + golang-migrate runner in `initDB`
 - [x] Step 2: `go get github.com/golang-migrate/migrate/v4` + `go mod tidy`
-- [ ] Step 3: Verify `go build ./...` (amd64) compiles clean
-- [ ] Step 4: Write `Dockerfile` — single-stage, COPY arm64 binary, root distroless-static
-- [ ] Step 5: Write `build.sh` — cross-compile arm64 + buildx push
+- [x] Step 3: Verify `go build ./...` (amd64) compiles clean
+- [x] Step 4: Write `Dockerfile` — single-stage, COPY arm64 binary, root distroless-static
+- [x] Step 5: Write `build.sh` — cross-compile arm64 + buildx push
 - [ ] Step 6: Write `docker-compose.yml` — pull-only, image:, env_file, volume, restart
 - [ ] Step 7: Write `.env` — creds from env.sh, plain KEY=value
 - [ ] Step 8: Write `.dockerignore`

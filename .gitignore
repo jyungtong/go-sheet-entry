@@ -1,3 +1,4 @@
 bin/*
 env.*
 data.db
+go-sheet-entry-linux-arm64

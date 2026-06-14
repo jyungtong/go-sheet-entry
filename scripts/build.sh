@@ -1,14 +1,9 @@
 #!/bin/bash
 set -e
 
-BINARY="go-sheet-entry-linux-arm64"
-OUT="bin/$BINARY"
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+  go build -trimpath -ldflags="-s -w" -o go-sheet-entry-linux-arm64 .
 
-mkdir -p bin
-
-GOOS=linux GOARCH=arm64 go build \
-  -ldflags="-s -w" \
-  -o "$OUT" \
-  .
-
-echo "Built: $OUT"
+docker buildx build --platform linux/arm64 \
+  -t ghcr.io/jyungtong/go-sheet-entry:latest \
+  --push .
