@@ -1,0 +1,8 @@
+services:
+  bot:
+    image: ghcr.io/jyungtong/go-sheet-entry:latest
+    env_file: .env
+    working_dir: /data
+    volumes:
+      - ./data.db:/data/data.db
+    restart: unless-stopped

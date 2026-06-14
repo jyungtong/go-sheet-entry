@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"log"
@@ -26,8 +27,11 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
+
+//go:embed db/migrations/*.sql
+var migrationFS embed.FS
 
 type SheetStore struct {
 	SheetUrl string
@@ -50,14 +54,17 @@ var (
 )
 
 func runMigrations(db *sql.DB) {
+	src, err := iofs.New(migrationFS, "db/migrations")
+	if err != nil {
+		log.Fatal("migrate source:", err)
+	}
+
 	driver, err := sqlite.WithInstance(db, &sqlite.Config{})
 	if err != nil {
 		log.Fatal("migrate driver:", err)
 	}
 
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://./db/migrations",
-		"sqlite", driver)
+	m, err := migrate.NewWithInstance("iofs", src, "sqlite", driver)
 	if err != nil {
 		log.Fatal("migrate init:", err)
 	}
